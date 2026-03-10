@@ -1,0 +1,48 @@
+import operator
+from typing import Annotated, Optional
+from typing_extensions import TypedDict
+from pydantic import BaseModel, Field
+
+
+class OrgData(BaseModel):
+    company_name: str
+    company_url: str
+    company_description: str
+    other_information: str = ""
+
+
+class LogoFormat(BaseModel):
+    src: str
+    format: str
+    background: Optional[str] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
+    analysis: Optional[str] = None
+    usable: Optional[bool] = None
+
+
+class Logo(BaseModel):
+    theme: str = ""
+    type: str = ""
+    tags: list[str] = Field(default_factory=list)
+    formats: list[LogoFormat] = Field(default_factory=list)
+
+
+class BrandData(BaseModel):
+    name: str = ""
+    domain: str = ""
+    description: Optional[str] = None
+    logos: list[Logo] = Field(default_factory=list)
+    colors: list[dict] = Field(default_factory=list)
+    fonts: list[dict] = Field(default_factory=list)
+
+
+class PhishingState(TypedDict):
+    user_input: str
+    scenario: Optional[str]
+    org_data: Optional[OrgData]
+    brand_data: Optional[BrandData]
+    html_email: Optional[str]
+    output_path: Optional[str]
+    # reducer: each node appends, never overwrites
+    errors: Annotated[list[str], operator.add]

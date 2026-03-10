@@ -1,0 +1,24 @@
+# Generated output
+*.html
+/tmp/
+
+# Secrets / credentials
+.env
+*.key
+*.pem
+
+# n8n local data
+.n8n/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+dist/
+build/
+
+# Editor
+.vscode/
+*.swp
