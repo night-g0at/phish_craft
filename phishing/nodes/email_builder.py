@@ -14,6 +14,7 @@ Requirements:
 - Include a logo (use a provided URL, or render a text-based logo block in the company's brand colors if no URL is available)
 - Use today's date for realism
 - The phishing pretext must closely follow the user_input and scenario — preserve the specific angle, urgency, and framing described
+- Always include a prominent, clearly styled CTA button (e.g. "Verify Now", "Re-enroll Now", "Complete Review") — it must be a full-width or centred button block in the company's primary brand color, with a believable but obviously fake href URL that matches the scenario (e.g. a spoofed internal portal domain). Also include a plain-text fallback URL below the button
 - Match the layout, tone, and UX patterns a real attacker would use for this scenario
 - If include_training_banner is true, append a clearly styled training watermark section at the bottom of the email explaining it is a simulation and listing the social engineering tactics used. If false, omit it entirely.
 - Output ONLY the raw HTML document, starting with <!DOCTYPE html>
