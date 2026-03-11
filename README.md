@@ -35,7 +35,7 @@ Wizard → Scenario → Org Data → Brand Assets → Logo Analysis → HTML Ema
 ```bash
 # 1. Clone the repo
 git clone <repo-url>
-cd phishing
+cd phish_craft
 
 # 2. Create and activate a virtual environment
 python -m venv .venv
@@ -73,7 +73,7 @@ BRANDFETCH_API_KEY=...
 Run the tool from any directory:
 
 ```bash
-phishing
+phishcraft
 ```
 
 The wizard will walk you through 8 steps:
@@ -92,7 +92,7 @@ Press Enter to accept defaults or skip optional fields.
 8. Include training banner: Appends a watermark explaining this is a simulation
 ```
 
-The generated HTML file is saved to the directory where you ran `phishing` and opens automatically in your browser.
+The generated HTML file is saved to the directory where you ran `phishcraft` and opens automatically in your browser.
 
 ---
 
@@ -184,4 +184,4 @@ If BrandFetch returns sparse data for a domain (no logos, fewer than 3 colors), 
 ## Output
 
 - **Browser**: Opens automatically from your current directory
-- **File**: Saved as `CompanyName.html` in the directory where `phishing` was run
+- **File**: Saved as `CompanyName.html` in the directory where `phishcraft` was run
