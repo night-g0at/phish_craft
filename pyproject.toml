@@ -3,7 +3,7 @@ requires = ["setuptools>=42"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "phishing-trainer"
+name = "phishcraft"
 version = "0.1.0"
 description = "Phishing email generator for cybersecurity awareness training"
 requires-python = ">=3.11"
@@ -18,7 +18,7 @@ dependencies = [
 ]
 
 [project.scripts]
-phishing = "phishing.main:app"
+phishcraft = "phishing.main:app"
 
 [tool.setuptools.packages.find]
 where = ["."]
