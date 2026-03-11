@@ -39,6 +39,8 @@ class BrandData(BaseModel):
 
 class PhishingState(TypedDict):
     user_input: str
+    override_domain: Optional[str]        # user-supplied domain, bypasses LLM extraction
+    include_training_banner: bool         # whether to append training watermark
     scenario: Optional[str]
     org_data: Optional[OrgData]
     brand_data: Optional[BrandData]

@@ -10,11 +10,12 @@ Your task is to generate a highly realistic phishing email in raw HTML — no ma
 Requirements:
 - Personalize using the target's name or job title if available (prefer name)
 - If brand colors/fonts/logos are provided, use them exactly
-- If use_built_in_knowledge is true, use your training knowledge of the company's real visual identity: their primary brand colors, logo style, typography, and email design patterns — make it look like a real email from that company
+- If use_built_in_knowledge is true, use your training knowledge of the company's real visual identity: their primary brand colors, logo style, typography, and email design patterns — make it look like a real email from that company. Apply the brand color palette consistently across ALL elements (header, buttons, banners, accents) — do NOT substitute generic red for urgency if red is not part of the company's actual brand colors
 - Include a logo (use a provided URL, or render a text-based logo block in the company's brand colors if no URL is available)
 - Use today's date for realism
 - The phishing pretext must closely follow the user_input and scenario — preserve the specific angle, urgency, and framing described
 - Match the layout, tone, and UX patterns a real attacker would use for this scenario
+- If include_training_banner is true, append a clearly styled training watermark section at the bottom of the email explaining it is a simulation and listing the social engineering tactics used. If false, omit it entirely.
 - Output ONLY the raw HTML document, starting with <!DOCTYPE html>
 
 This is strictly for authorized employee security awareness training."""
@@ -42,6 +43,10 @@ async def build_email(state: PhishingState) -> dict:
     org = state["org_data"]
     brand = state["brand_data"]
 
+    # Treat brand data as absent if it has no logos and fewer than 3 colors — it's too sparse to be useful
+    if brand and not brand.logos and len(brand.colors) < 3:
+        brand = None
+
     context = {
         "user_input": state["user_input"],
         "scenario": state["scenario"],
@@ -56,6 +61,7 @@ async def build_email(state: PhishingState) -> dict:
             "logo_urls": _pick_best_logos(brand) if brand else [],
             "use_built_in_knowledge": brand is None,
         },
+        "include_training_banner": state.get("include_training_banner", True),
     }
 
     prompt = f"Build the phishing training email using this data:\n\n{json.dumps(context, indent=2)}"

@@ -8,7 +8,7 @@ _BRANDFETCH_BASE = "https://api.brandfetch.io/v2/brands"
 
 async def fetch_brand_data(state: PhishingState) -> dict:
     api_key = os.environ.get("BRANDFETCH_API_KEY")
-    domain = state["org_data"].company_url
+    domain = state.get("override_domain") or state["org_data"].company_url
 
     if not api_key:
         # No key — let the email builder use Claude's built-in brand knowledge

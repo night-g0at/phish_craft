@@ -8,7 +8,10 @@ _SYSTEM = (
     "You are extracting structured company data for a cybersecurity awareness training tool. "
     "From the provided text, determine: the company name, its primary website URL (just the domain, "
     "no path), a one-sentence description of what the company does, and pass through any other "
-    "persona or targeting information unchanged in 'other_information'."
+    "persona or targeting information unchanged in 'other_information'. "
+    "For the domain, use the company's exact official corporate domain as it appears in their website "
+    "address bar — use the full domain (e.g. 'firstenergycorp.com', 'jpmorganchase.com') rather than "
+    "shortened or guessed variants (e.g. not 'firstenergy.com', not 'jpmorgan.com')."
 )
 
 
