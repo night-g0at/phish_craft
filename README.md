@@ -106,9 +106,30 @@ Press Enter to accept defaults or skip optional fields.
 7. Urgency level:           1 = Low / 2 = Medium / 3 = High
 8. Include training banner: Appends a watermark explaining this is a simulation
 9. Landing page:            Optional — also generate a matching standalone landing page (default: No)
+   └─ Post-submission debrief: Only asked if step 9 is Yes AND GoPhish mode is off. The message
+                               shown after a user submits the form — defaults to an authorized-test
+                               reassurance (no credentials captured, stored, or used).
+10. GoPhish import mode:    Optional — format the email + landing page for GoPhish (default: No)
 ```
 
 The generated HTML file(s) are saved to the directory where you ran `phishcraft` and open automatically in your browser. If you enable the landing page (step 9), a second `CompanyName_landing.html` file is created alongside the email.
+
+**Post-submission debrief:** when you enable the landing page *without* GoPhish mode, the wizard prompts for the message shown after someone submits the form. The form never captures anything; this text is the reassurance the visitor sees. The default states it was an authorized test and that nothing they entered is captured, stored, or used — useful when your engagement does no post-exploitation with submitted credentials. Supply your own wording to match the engagement's rules of engagement. (In GoPhish mode this prompt is skipped — see below.)
+
+---
+
+## GoPhish Integration
+
+Answer **yes** to wizard step 10 to format both files for import into [GoPhish](https://getgophish.com/). The two files are already written separately (`CompanyName.html` and `CompanyName_landing.html`), so each pastes/imports on its own.
+
+In GoPhish mode:
+
+- **Email** — the CTA link and fallback URL use `{{.URL}}`, the greeting uses `{{.FirstName}}`, and a `{{.Tracking}}` open-tracking pixel is added. Import under **Email Templates → New → Import HTML**; GoPhish keeps the template variables.
+- **Landing page** — the form is a real `<form method="post" action="">` with named inputs (`email`/`username`/`password`) and no inert JavaScript, so GoPhish can record submissions. Import under **Landing Pages → New → Import HTML**, then enable **Capture Submitted Data** (and **Capture Passwords** if desired) and set a **Redirect URL** for your debrief/awareness page.
+
+> **Capture happens in GoPhish, not in the page.** GoPhish mode intentionally makes the landing-page form submit so the authorized GoPhish framework can capture and report it; the generated page itself still stores and sends nothing. With GoPhish mode **off**, the landing page stays fully inert and self-contained (form submits nowhere, inline debrief reveal). Use GoPhish mode only within a sanctioned engagement.
+
+After a GoPhish-mode run, the tool prints an import-steps panel summarizing the above.
 
 ---
 

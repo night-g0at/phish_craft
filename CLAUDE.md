@@ -30,7 +30,8 @@ See `ARCHITECTURE.md` for the full stage-by-stage breakdown and the state schema
 - **Read model text with `str(response.text)`, not `response.content`.** Models with thinking enabled (the 5-family, on by default) return content as a list of blocks; `.text` concatenates the text blocks and also works for plain-string responses.
 - **Filenames come from `phishing/naming.py`** (`safe_filename`, `landing_page_filename`) so the email's CTA target and the file written to disk always match.
 - **Errors are non-fatal.** Nodes append to `state["errors"]` (an `operator.add`-reduced list) instead of raising, so the pipeline always completes; warnings are shown in the final summary.
-- **Landing page safety is enforced in the prompt** (`nodes/landing_page.py`): no form submission, no `fetch`/`XMLHttpRequest`/`sendBeacon`, no storage; submit triggers a "Security Awareness Training" reveal. Preserve these guarantees when editing that node.
+- **Landing page safety is enforced in the prompt** (`nodes/landing_page.py`): no form submission, no `fetch`/`XMLHttpRequest`/`sendBeacon`, no storage; submit triggers a "Security Awareness Training" reveal whose text comes from `landing_debrief_message` (wizard-supplied; `DEFAULT_DEBRIEF` in `main.py`). Preserve these guarantees in the default (non-GoPhish) path when editing that node.
+- **GoPhish mode (`gophish_mode`, wizard step 10)** appends a system-prompt addendum in both `email_builder.py` and `landing_page.py`. In this mode the email uses GoPhish template vars (`{{.URL}}`, `{{.FirstName}}`, `{{.Tracking}}`) and the landing page emits a real submitting `<form method="post" action="">` with named inputs (no inert JS, no inline debrief) so GoPhish captures submissions. Capture is done by the authorized GoPhish framework, not the page. Keep the inert behavior as the default when `gophish_mode` is false.
 
 ## Environment / Credentials
 
