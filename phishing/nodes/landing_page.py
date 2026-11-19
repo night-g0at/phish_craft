@@ -18,7 +18,7 @@ Requirements:
 
 CRITICAL SAFETY RULES — this is strictly authorized training material and MUST NOT capture or transmit anything:
 - The form's action MUST be inert. Do NOT submit anywhere: no `action` URL that posts data, no `fetch`/`XMLHttpRequest`/`navigator.sendBeacon`, no external requests, no localStorage/cookies, no writing the entered values anywhere.
-- Handle the form's submit event in a small inline <script> that calls event.preventDefault() and, instead of sending anything, reveals a clearly styled "Security Awareness Training" message explaining this was a simulated phishing page and that in a real attack their credentials would now be stolen. Never echo, store, or log the entered values.
+- Handle the form's submit event in a small inline <script> that calls event.preventDefault() and, instead of sending anything, reveals a clearly styled "Security Awareness Training" message. If a debrief_message is provided in the data, use its exact text as the body of that message (you may add a short heading like "Security Awareness Training"); otherwise explain this was a simulated phishing page and that in a real attack their credentials would now be stolen. Never echo, store, or log the entered values.
 - Do not include any tracking pixels, analytics, or outbound links that carry data.
 
 - Do NOT use emoji or emoji-style pictographs anywhere — not next to bullet points or list items, nor in headings, labels, or buttons. Emoji bullets read as obviously AI-generated and look unprofessional. Use plain text with standard typographic bullets (or no bullet glyph at all). If iconography genuinely helps, use a tasteful inline SVG or simple CSS shape in the brand style (e.g. a clean leaf motif) — never an emoji character.
@@ -74,6 +74,7 @@ async def build_landing_page(state: PhishingState) -> dict:
             "use_built_in_knowledge": brand is None,
         },
         "include_training_banner": state.get("include_training_banner", True),
+        "debrief_message": state.get("landing_debrief_message"),
     }
 
     prompt = f"Build the phishing training landing page using this data:\n\n{json.dumps(context, indent=2)}"

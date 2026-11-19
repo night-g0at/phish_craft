@@ -15,6 +15,15 @@ load_dotenv()
 console = Console()
 app = typer.Typer(add_completion=False)
 
+# Shown on the landing page after a user submits the form. Reassures the target
+# that this was an authorized test and their input is not being used.
+DEFAULT_DEBRIEF = (
+    "This was an authorized security awareness test run by your organization. "
+    "No credentials were captured, stored, or used, and no further action is taken "
+    "with anything you entered. Please treat this as a reminder to check links and "
+    "sender addresses carefully before signing in."
+)
+
 
 def _check_env():
     missing = [k for k in ("ANTHROPIC_API_KEY",) if not os.environ.get(k)]
@@ -24,8 +33,11 @@ def _check_env():
         raise typer.Exit(1)
 
 
-def _run_wizard() -> tuple[str, str | None, bool, bool]:
-    """Interactive wizard. Returns (enriched_prompt, override_domain, include_banner, include_landing)."""
+def _run_wizard() -> tuple[str, str | None, bool, bool, str | None]:
+    """Interactive wizard.
+
+    Returns (enriched_prompt, override_domain, include_banner, include_landing, landing_debrief).
+    """
     console.print(Rule("[bold cyan]Phishing Email Generator[/bold cyan]"))
     console.print("[dim]Press Enter to accept defaults or skip optional fields.[/dim]\n")
 
@@ -81,6 +93,15 @@ def _run_wizard() -> tuple[str, str | None, bool, bool]:
         default=False,
     )
 
+    # 9a. Debrief message shown after submission (only relevant if a landing page is generated)
+    landing_debrief: str | None = None
+    if include_landing:
+        console.print(
+            "\n[bold]   Post-submission debrief[/bold] "
+            "[dim](shown after a user submits the form — explain it was an authorized test)[/dim]"
+        )
+        landing_debrief = Prompt.ask("   Message", default=DEFAULT_DEBRIEF)
+
     # Build enriched prompt
     parts = [f"Target company: {company}"]
     if persona:
@@ -93,7 +114,7 @@ def _run_wizard() -> tuple[str, str | None, bool, bool]:
         parts.append(f"Internal systems to mention: {systems}")
 
     enriched_prompt = "\n".join(parts)
-    return enriched_prompt, override_domain, include_banner, include_landing
+    return enriched_prompt, override_domain, include_banner, include_landing, landing_debrief
 
 
 @app.command()
@@ -101,11 +122,13 @@ def run():
     """Generate a phishing awareness training email."""
     _check_env()
 
-    enriched_prompt, override_domain, include_banner, include_landing = _run_wizard()
+    enriched_prompt, override_domain, include_banner, include_landing, landing_debrief = _run_wizard()
 
     console.print()
     console.print(Panel(enriched_prompt, title="[cyan]Simulation Brief[/cyan]", border_style="cyan"))
-    asyncio.run(_run_graph(enriched_prompt, override_domain, include_banner, include_landing))
+    asyncio.run(
+        _run_graph(enriched_prompt, override_domain, include_banner, include_landing, landing_debrief)
+    )
 
 
 async def _run_graph(
@@ -113,6 +136,7 @@ async def _run_graph(
     override_domain: str | None,
     include_banner: bool,
     include_landing: bool,
+    landing_debrief: str | None = None,
 ):
     # Import here so load_dotenv() runs before LangChain imports (which read env at import time)
     from phishing.graph import build_graph
@@ -145,6 +169,7 @@ async def _run_graph(
                 "override_domain": override_domain,
                 "include_training_banner": include_banner,
                 "include_landing_page": include_landing,
+                "landing_debrief_message": landing_debrief,
                 "errors": [],
             },
             stream_mode="updates",

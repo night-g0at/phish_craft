@@ -42,6 +42,7 @@ class PhishingState(TypedDict):
     override_domain: Optional[str]        # user-supplied domain, bypasses LLM extraction
     include_training_banner: bool         # whether to append training watermark
     include_landing_page: bool            # whether to also generate a matching landing page
+    landing_debrief_message: Optional[str]  # custom message shown after a user submits the form
     scenario: Optional[str]
     org_data: Optional[OrgData]
     brand_data: Optional[BrandData]
