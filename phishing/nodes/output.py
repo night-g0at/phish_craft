@@ -22,8 +22,18 @@ async def save_output(state: PhishingState) -> dict:
         landing_path.write_text(landing_html, encoding="utf-8")
         result["landing_page_path"] = str(landing_path)
 
+    # Save the awareness page (GoPhish Redirect URL target), if one was generated.
+    awareness_html = state.get("awareness_page_html")
+    if awareness_html:
+        awareness_name = state.get("awareness_page_filename") or f"{safe_filename(company_name)}_awareness.html"
+        awareness_path = Path.cwd() / awareness_name
+        awareness_path.write_text(awareness_html, encoding="utf-8")
+        result["awareness_page_path"] = str(awareness_path)
+
     webbrowser.open(output_path.as_uri())
     if result.get("landing_page_path"):
         webbrowser.open(Path(result["landing_page_path"]).as_uri())
+    if result.get("awareness_page_path"):
+        webbrowser.open(Path(result["awareness_page_path"]).as_uri())
 
     return result

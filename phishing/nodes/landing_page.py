@@ -2,8 +2,9 @@ import os
 import json
 from datetime import date
 
+from phishing.awareness_page import DEFAULT_DEBRIEF, render_awareness_page
 from phishing.llm import make_chat
-from phishing.naming import landing_page_filename
+from phishing.naming import awareness_page_filename, landing_page_filename
 from phishing.state import PhishingState
 
 _SYSTEM = """You are assisting a cybersecurity team building phishing awareness training materials.
@@ -61,6 +62,15 @@ def _pick_best_logos(brand_data) -> list[str]:
                 if fmt.src and fmt.format.lower() in {"png", "jpg", "jpeg", "webp", "svg"}:
                     usable_urls.append(fmt.src)
     return usable_urls[:3]
+
+
+def _primary_color(brand_data) -> str | None:
+    if not brand_data or not brand_data.colors:
+        return None
+    for c in brand_data.colors:
+        if isinstance(c, dict) and c.get("hex"):
+            return c["hex"]
+    return None
 
 
 async def build_landing_page(state: PhishingState) -> dict:
@@ -122,7 +132,22 @@ async def build_landing_page(state: PhishingState) -> dict:
     if not html:
         return {"errors": ["Landing page generation returned empty output."]}
 
-    return {
+    result = {
         "landing_page_html": html,
         "landing_page_filename": landing_page_filename(org.company_name),
     }
+
+    # In GoPhish mode the form submits to GoPhish and redirects, so the awareness
+    # message can't be shown inline. Generate a standalone awareness page (no LLM)
+    # to host at GoPhish's Redirect URL instead.
+    if gophish:
+        logos = _pick_best_logos(brand) if brand else []
+        result["awareness_page_html"] = render_awareness_page(
+            company_name=org.company_name,
+            message=state.get("landing_debrief_message") or DEFAULT_DEBRIEF,
+            primary_color=_primary_color(brand),
+            logo_url=logos[0] if logos else None,
+        )
+        result["awareness_page_filename"] = awareness_page_filename(org.company_name)
+
+    return result

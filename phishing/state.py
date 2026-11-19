@@ -50,7 +50,10 @@ class PhishingState(TypedDict):
     html_email: Optional[str]
     landing_page_html: Optional[str]      # generated standalone landing page (None if skipped)
     landing_page_filename: Optional[str]  # relative filename the email CTA links to
+    awareness_page_html: Optional[str]    # post-submit awareness page (GoPhish mode only)
+    awareness_page_filename: Optional[str]  # relative filename for the awareness page
     output_path: Optional[str]
     landing_page_path: Optional[str]      # absolute path the landing page was saved to
+    awareness_page_path: Optional[str]    # absolute path the awareness page was saved to
     # reducer: each node appends, never overwrites
     errors: Annotated[list[str], operator.add]

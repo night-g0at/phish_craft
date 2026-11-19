@@ -13,3 +13,8 @@ def safe_filename(name: str, fallback: str = "phishing_email") -> str:
 def landing_page_filename(company_name: str) -> str:
     """Relative filename for the landing page that the email CTA links to."""
     return f"{safe_filename(company_name, 'phishing')}_landing.html"
+
+
+def awareness_page_filename(company_name: str) -> str:
+    """Relative filename for the post-submit awareness page (GoPhish Redirect URL target)."""
+    return f"{safe_filename(company_name, 'phishing')}_awareness.html"

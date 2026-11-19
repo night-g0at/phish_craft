@@ -12,17 +12,10 @@ from rich.rule import Rule
 
 load_dotenv()
 
+from phishing.awareness_page import DEFAULT_DEBRIEF
+
 console = Console()
 app = typer.Typer(add_completion=False)
-
-# Shown on the landing page after a user submits the form. Reassures the target
-# that this was an authorized test and their input is not being used.
-DEFAULT_DEBRIEF = (
-    "This was an authorized security awareness test run by your organization. "
-    "No credentials were captured, stored, or used, and no further action is taken "
-    "with anything you entered. Please treat this as a reminder to check links and "
-    "sender addresses carefully before signing in."
-)
 
 
 def _check_env():
@@ -101,13 +94,19 @@ def _run_wizard() -> tuple[str, str | None, bool, bool, str | None, bool]:
         default=False,
     )
 
-    # 9a. Debrief message shown after submission. Only relevant for an inline-reveal landing page;
-    # in GoPhish mode the debrief is the GoPhish Redirect URL instead, so we skip this prompt.
+    # 9a. Post-submission awareness message. Used as the inline reveal on a standalone landing
+    # page, or (in GoPhish mode) as the body of the generated awareness page you set as GoPhish's
+    # Redirect URL. Asked whenever a landing page is generated.
     landing_debrief: str | None = None
-    if include_landing and not gophish_mode:
+    if include_landing:
+        where = (
+            "on the generated awareness page (set it as GoPhish's Redirect URL)"
+            if gophish_mode
+            else "inline after a user submits the form"
+        )
         console.print(
-            "\n[bold]   Post-submission debrief[/bold] "
-            "[dim](shown after a user submits the form — explain it was an authorized test)[/dim]"
+            "\n[bold]   Post-submission security-awareness message[/bold] "
+            f"[dim](shown {where})[/dim]"
         )
         landing_debrief = Prompt.ask("   Message", default=DEFAULT_DEBRIEF)
 
@@ -231,8 +230,12 @@ def _print_gophish_help(state: dict):
     if state.get("landing_page_path"):
         tips.append(
             "• [cyan]Landing Pages[/cyan] → New → Import the *_landing.html. Enable "
-            "[bold]Capture Submitted Data[/bold] (and [bold]Capture Passwords[/bold] if desired), "
-            "and set a [bold]Redirect URL[/bold] for your debrief/awareness page."
+            "[bold]Capture Submitted Data[/bold] (and [bold]Capture Passwords[/bold] if desired)."
+        )
+    if state.get("awareness_page_path"):
+        tips.append(
+            "• Host the [cyan]*_awareness.html[/cyan] page and set it as the Landing Page's "
+            "[bold]Redirect URL[/bold] — targets see the security-awareness message there after submitting."
         )
     tips.append(
         "• The landing page form posts to GoPhish (empty action); GoPhish records the submission "
@@ -260,6 +263,9 @@ def _print_summary(state: dict):
     landing_path = state.get("landing_page_path")
     if landing_path:
         lines.append(f"[green]Landing:[/green]  {landing_path}")
+    awareness_path = state.get("awareness_page_path")
+    if awareness_path:
+        lines.append(f"[green]Awareness:[/green] {awareness_path}")
     lines.append(f"[yellow]Warnings:[/yellow] {len(errors)}")
 
     console.print(Panel("\n".join(lines), title="[green]Done[/green]", border_style="green"))
