@@ -21,6 +21,7 @@ CRITICAL SAFETY RULES — this is strictly authorized training material and MUST
 - Handle the form's submit event in a small inline <script> that calls event.preventDefault() and, instead of sending anything, reveals a clearly styled "Security Awareness Training" message explaining this was a simulated phishing page and that in a real attack their credentials would now be stolen. Never echo, store, or log the entered values.
 - Do not include any tracking pixels, analytics, or outbound links that carry data.
 
+- Do NOT use emoji or emoji-style pictographs anywhere — not next to bullet points or list items, nor in headings, labels, or buttons. Emoji bullets read as obviously AI-generated and look unprofessional. Use plain text with standard typographic bullets (or no bullet glyph at all). If iconography genuinely helps, use a tasteful inline SVG or simple CSS shape in the brand style (e.g. a clean leaf motif) — never an emoji character.
 - Use today's date where a date is natural.
 - If include_training_banner is true, ALSO show a persistent, clearly styled training watermark/banner (e.g. a fixed bar) identifying this as an authorized simulation and listing the social engineering tactics used. If false, omit the always-visible banner — but the inert form and the post-submit training reveal are REQUIRED regardless.
 - Output ONLY the raw HTML document, starting with <!DOCTYPE html>.
