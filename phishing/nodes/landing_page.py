@@ -28,6 +28,26 @@ CRITICAL SAFETY RULES — this is strictly authorized training material and MUST
 
 This is strictly for authorized employee security awareness training."""
 
+# Appended to the system prompt when generating output for GoPhish import. In this mode the
+# page is served and captured by GoPhish (an authorized phishing-simulation framework), so the
+# form must actually submit for GoPhish to record it. This deliberately overrides the inert-form
+# rules above.
+_GOPHISH_LANDING_ADDENDUM = """
+
+GOPHISH OUTPUT MODE — this page will be imported into GoPhish, which hosts it, captures form
+submissions, and performs the post-submit redirect itself. This OVERRIDES the inert-form safety
+rules above, because capture is handled by the authorized GoPhish framework, not by this page:
+- The form MUST be a real, submitting form: <form method="post" action="">. Leave the action
+  EMPTY (GoPhish rewrites it to its own capture endpoint). Do NOT call event.preventDefault(),
+  do NOT add any JavaScript that blocks or intercepts submission, and do NOT add fetch/XHR/sendBeacon.
+- Give every input a sensible, lowercase name attribute so GoPhish can capture it — e.g.
+  name="email" or name="username", and name="password". Include a normal submit <button>/<input>.
+- Do NOT include any inline post-submit "reveal" script or JS-driven message; GoPhish redirects
+  after capture (the operator sets the debrief/awareness page as GoPhish's Redirect URL). Ignore
+  any debrief_message in the data.
+- You may still include a visible training banner if include_training_banner is true.
+Output only the raw HTML; no tracking pixel is needed on the landing page."""
+
 
 def _pick_best_logos(brand_data) -> list[str]:
     usable_urls = []
@@ -52,6 +72,8 @@ async def build_landing_page(state: PhishingState) -> dict:
     )
     llm = make_chat(model=model_name, temperature=0.4, max_tokens=8192)
 
+    gophish = state.get("gophish_mode", False)
+
     org = state["org_data"]
     brand = state["brand_data"]
 
@@ -74,14 +96,17 @@ async def build_landing_page(state: PhishingState) -> dict:
             "use_built_in_knowledge": brand is None,
         },
         "include_training_banner": state.get("include_training_banner", True),
-        "debrief_message": state.get("landing_debrief_message"),
+        # In GoPhish mode the debrief is handled by GoPhish's Redirect URL, not an inline reveal.
+        "debrief_message": None if gophish else state.get("landing_debrief_message"),
+        "gophish_mode": gophish,
     }
 
     prompt = f"Build the phishing training landing page using this data:\n\n{json.dumps(context, indent=2)}"
 
+    system_content = _SYSTEM + (_GOPHISH_LANDING_ADDENDUM if gophish else "")
     try:
         response = await llm.ainvoke([
-            {"role": "system", "content": _SYSTEM},
+            {"role": "system", "content": system_content},
             {"role": "user", "content": prompt},
         ])
     except Exception as e:

@@ -22,6 +22,18 @@ Requirements:
 
 This is strictly for authorized employee security awareness training."""
 
+# Appended to the system prompt when generating output for GoPhish import.
+_GOPHISH_EMAIL_ADDENDUM = """
+
+GOPHISH OUTPUT MODE — this email will be imported into GoPhish. Use GoPhish's Go-template
+variables LITERALLY in the HTML, with the exact double-brace, leading-dot syntax:
+- The CTA button's href AND the plain-text fallback URL below it MUST be exactly {{.URL}}
+  (GoPhish rewrites this to the tracked phishing link). Ignore any landing_page_url in the data.
+- Personalize the greeting with {{.FirstName}} instead of a hardcoded name (e.g. "Hi {{.FirstName}},").
+  You may also use {{.Email}} or {{.Position}} where natural.
+- Immediately before the closing </body> tag, include the GoPhish open-tracking pixel exactly: {{.Tracking}}
+Keep these tokens verbatim — do not URL-encode them, wrap them in quotes-within-quotes, or alter the braces/dot."""
+
 
 def _pick_best_logos(brand_data) -> list[str]:
     usable_urls = []
@@ -43,6 +55,8 @@ async def build_email(state: PhishingState) -> dict:
     # A full branded HTML email can exceed 4096 tokens; give it headroom so the
     # output is never truncated (and isn't starved by thinking on 5-family models).
     llm = make_chat(model=model_name, temperature=0.4, max_tokens=8192)
+
+    gophish = state.get("gophish_mode", False)
 
     org = state["org_data"]
     brand = state["brand_data"]
@@ -67,13 +81,16 @@ async def build_email(state: PhishingState) -> dict:
         },
         "include_training_banner": state.get("include_training_banner", True),
         # When a landing page was generated, point the CTA at its local file.
-        "landing_page_url": state.get("landing_page_filename"),
+        # In GoPhish mode the CTA uses {{.URL}} instead (GoPhish hosts the page).
+        "landing_page_url": None if gophish else state.get("landing_page_filename"),
+        "gophish_mode": gophish,
     }
 
     prompt = f"Build the phishing training email using this data:\n\n{json.dumps(context, indent=2)}"
 
+    system_content = _SYSTEM + (_GOPHISH_EMAIL_ADDENDUM if gophish else "")
     response = await llm.ainvoke([
-        {"role": "system", "content": _SYSTEM},
+        {"role": "system", "content": system_content},
         {"role": "user", "content": prompt},
     ])
 

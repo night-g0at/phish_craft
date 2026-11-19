@@ -33,10 +33,11 @@ def _check_env():
         raise typer.Exit(1)
 
 
-def _run_wizard() -> tuple[str, str | None, bool, bool, str | None]:
+def _run_wizard() -> tuple[str, str | None, bool, bool, str | None, bool]:
     """Interactive wizard.
 
-    Returns (enriched_prompt, override_domain, include_banner, include_landing, landing_debrief).
+    Returns (enriched_prompt, override_domain, include_banner, include_landing,
+    landing_debrief, gophish_mode).
     """
     console.print(Rule("[bold cyan]Phishing Email Generator[/bold cyan]"))
     console.print("[dim]Press Enter to accept defaults or skip optional fields.[/dim]\n")
@@ -93,9 +94,17 @@ def _run_wizard() -> tuple[str, str | None, bool, bool, str | None]:
         default=False,
     )
 
-    # 9a. Debrief message shown after submission (only relevant if a landing page is generated)
+    # 10. GoPhish output mode (affects the email always; the landing page when one is generated)
+    gophish_mode = Confirm.ask(
+        "\n[bold]10. Format output for GoPhish import?[/bold] "
+        "[dim](email uses {{.URL}}/{{.Tracking}}; landing page uses a capture-ready form)[/dim]",
+        default=False,
+    )
+
+    # 9a. Debrief message shown after submission. Only relevant for an inline-reveal landing page;
+    # in GoPhish mode the debrief is the GoPhish Redirect URL instead, so we skip this prompt.
     landing_debrief: str | None = None
-    if include_landing:
+    if include_landing and not gophish_mode:
         console.print(
             "\n[bold]   Post-submission debrief[/bold] "
             "[dim](shown after a user submits the form — explain it was an authorized test)[/dim]"
@@ -114,7 +123,14 @@ def _run_wizard() -> tuple[str, str | None, bool, bool, str | None]:
         parts.append(f"Internal systems to mention: {systems}")
 
     enriched_prompt = "\n".join(parts)
-    return enriched_prompt, override_domain, include_banner, include_landing, landing_debrief
+    return (
+        enriched_prompt,
+        override_domain,
+        include_banner,
+        include_landing,
+        landing_debrief,
+        gophish_mode,
+    )
 
 
 @app.command()
@@ -122,12 +138,26 @@ def run():
     """Generate a phishing awareness training email."""
     _check_env()
 
-    enriched_prompt, override_domain, include_banner, include_landing, landing_debrief = _run_wizard()
+    (
+        enriched_prompt,
+        override_domain,
+        include_banner,
+        include_landing,
+        landing_debrief,
+        gophish_mode,
+    ) = _run_wizard()
 
     console.print()
     console.print(Panel(enriched_prompt, title="[cyan]Simulation Brief[/cyan]", border_style="cyan"))
     asyncio.run(
-        _run_graph(enriched_prompt, override_domain, include_banner, include_landing, landing_debrief)
+        _run_graph(
+            enriched_prompt,
+            override_domain,
+            include_banner,
+            include_landing,
+            landing_debrief,
+            gophish_mode,
+        )
     )
 
 
@@ -137,6 +167,7 @@ async def _run_graph(
     include_banner: bool,
     include_landing: bool,
     landing_debrief: str | None = None,
+    gophish_mode: bool = False,
 ):
     # Import here so load_dotenv() runs before LangChain imports (which read env at import time)
     from phishing.graph import build_graph
@@ -170,6 +201,7 @@ async def _run_graph(
                 "include_training_banner": include_banner,
                 "include_landing_page": include_landing,
                 "landing_debrief_message": landing_debrief,
+                "gophish_mode": gophish_mode,
                 "errors": [],
             },
             stream_mode="updates",
@@ -185,6 +217,28 @@ async def _run_graph(
                         merged_state[k] = v
 
     _print_summary(merged_state)
+
+    if gophish_mode:
+        _print_gophish_help(merged_state)
+
+
+def _print_gophish_help(state: dict):
+    tips = [
+        "[bold]Import into GoPhish:[/bold]",
+        "• [cyan]Email Templates[/cyan] → New → Import the email HTML. GoPhish keeps "
+        "{{.URL}}, {{.FirstName}}, {{.Tracking}} as template variables.",
+    ]
+    if state.get("landing_page_path"):
+        tips.append(
+            "• [cyan]Landing Pages[/cyan] → New → Import the *_landing.html. Enable "
+            "[bold]Capture Submitted Data[/bold] (and [bold]Capture Passwords[/bold] if desired), "
+            "and set a [bold]Redirect URL[/bold] for your debrief/awareness page."
+        )
+    tips.append(
+        "• The landing page form posts to GoPhish (empty action); GoPhish records the submission "
+        "and redirects — nothing is captured or stored by the page itself."
+    )
+    console.print(Panel("\n".join(tips), title="[blue]GoPhish[/blue]", border_style="blue"))
 
 
 def _print_summary(state: dict):
