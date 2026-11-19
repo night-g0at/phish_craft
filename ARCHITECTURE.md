@@ -10,10 +10,10 @@ The tool is built on **LangGraph**, a framework for orchestrating multi-step AI 
 
 ```
 ┌─────────────┐
-│    Wizard   │  User fills in target, domain, persona, sender,
-│   (CLI)     │  pretext, systems, urgency, training banner
+│    Wizard   │  User fills in target, domain, persona, sender, pretext,
+│   (CLI)     │  systems, urgency, training banner, landing-page toggle
 └──────┬──────┘
-       │ user_input + override_domain + include_training_banner
+       │ user_input + override_domain + include_training_banner + include_landing_page
        ▼
 ┌─────────────────┐
 │ 1. Generate     │  claude-sonnet-4-6
@@ -40,16 +40,26 @@ The tool is built on **LangGraph**, a framework for orchestrating multi-step AI 
        │ brand_data (logos with usability flags)
        ▼
 ┌─────────────────┐
-│ 5. Build        │  claude-sonnet-4-6 (or override model)
-│    Email        │  Generates the full HTML phishing email
+│ 5. Build        │  claude model (opt-in; skipped if not requested)
+│    Landing Page │  Generates a brand-matched, inert landing page
+└──────┬──────────┘
+       │ landing_page_html + landing_page_filename
+       ▼
+┌─────────────────┐
+│ 6. Build        │  claude-sonnet-4-6 (or override model)
+│    Email        │  Generates the HTML email; CTA links to the landing page
 └──────┬──────────┘
        │ html_email
        ▼
 ┌─────────────────┐
-│ 6. Save         │  Writes HTML to disk, opens in browser
+│ 7. Save         │  Writes email (+ landing page) to disk, opens in browser
 │    Output       │
 └─────────────────┘
 ```
+
+The landing-page stage runs **before** the email so the email's CTA can point at the
+landing page's local filename. When the user does not opt in, the stage is a no-op
+(returns immediately) and the email falls back to a believable fake spoof URL.
 
 ---
 
@@ -133,9 +143,27 @@ Each logo format is tagged `usable: true/false`. The email builder uses only usa
 
 ---
 
-### Stage 5 — Build Email
+### Stage 5 — Build Landing Page *(optional)*
+**File:** `phishing/nodes/landing_page.py`
+**Model:** `PHISHING_LANDING_MODEL` → `PHISHING_EMAIL_MODEL` → `claude-opus-4-6` (temperature 0.4 where supported, max 8192 tokens)
+
+Runs **only** when the user opts in at wizard step 9 (`include_landing_page`); otherwise it returns immediately and changes nothing. When enabled, it builds a brand-matched standalone HTML landing page — typically a spoofed sign-in portal or document/review page matching the email's pretext — using the same brand context (colors, fonts, usable logos) as the email.
+
+The generated page is **deliberately inert and safe for authorized training**. The system prompt hard-requires:
+
+- The form submits nowhere — no posting `action`, no `fetch`/`XMLHttpRequest`/`sendBeacon`, no external requests, no `localStorage`/cookies.
+- A small inline `<script>` intercepts submit, calls `preventDefault()`, and reveals a clearly styled **"Security Awareness Training"** message explaining the page was simulated and that a real attacker would now have the victim's credentials.
+- Entered values are never echoed, stored, logged, or transmitted; no tracking pixels or data-carrying outbound links.
+
+The persistent visible training banner follows the same `include_training_banner` toggle as the email, but the inert form and the post-submit training reveal are required regardless of that setting.
+
+**Output:** `landing_page_html` plus `landing_page_filename` (`{CompanyName}_landing.html`), which the next stage uses as the email's CTA target. On failure it appends to `errors` and the pipeline continues (the email simply uses a fake spoof URL).
+
+---
+
+### Stage 6 — Build Email
 **File:** `phishing/nodes/email_builder.py`
-**Model:** `claude-sonnet-4-6` (or `PHISHING_EMAIL_MODEL` env override, temperature 0.4, max 4096 tokens)
+**Model:** `claude-sonnet-4-6` (or `PHISHING_EMAIL_MODEL` env override, temperature 0.4 where supported, max 8192 tokens)
 
 The core generation step. Assembles all collected data into a JSON context block and instructs Claude to produce a complete, self-contained HTML email.
 
@@ -155,9 +183,12 @@ The core generation step. Assembles all collected data into a JSON context block
     "logo_urls": ["https://cdn.brandfetch.io/..."],
     "use_built_in_knowledge": false
   },
-  "include_training_banner": true
+  "include_training_banner": true,
+  "landing_page_url": "FirstEnergy_landing.html"
 }
 ```
+
+When `landing_page_url` is present (a landing page was generated), the model uses it exactly as the CTA button's `href` and plain-text fallback URL, so the email links to the local landing-page file. When it is `null`, the model falls back to a believable-but-fake spoof URL.
 
 **Branding logic:**
 - If `use_built_in_knowledge` is `false` — uses exact colors, fonts, and logos from BrandFetch
@@ -168,13 +199,16 @@ If `include_training_banner` is `true`, a clearly styled watermark section is ap
 
 ---
 
-### Stage 6 — Save Output
+### Stage 7 — Save Output
 **File:** `phishing/nodes/output.py`
 
-Writes the generated HTML to disk and opens it in the default browser.
+Writes the generated HTML to disk and opens it in the default browser. If a landing page was generated, it is saved alongside the email and also opened.
 
-- **Filename:** `{CompanyName}.html` (special characters stripped)
-- **Location:** The directory where `phishing` was run (`Path.cwd()`)
+- **Email filename:** `{CompanyName}.html` (special characters stripped)
+- **Landing page filename:** `{CompanyName}_landing.html` (only when generated)
+- **Location:** The directory where `phishcraft` was run (`Path.cwd()`)
+
+Filenames are produced by the shared helpers in `phishing/naming.py`, so the landing-page name referenced by the email CTA and the name written to disk always match.
 
 ---
 
@@ -187,6 +221,7 @@ PhishingState
 ├── user_input              str       — enriched prompt from wizard
 ├── override_domain         str|None  — user-supplied domain (skips LLM extraction)
 ├── include_training_banner bool      — whether to append training watermark
+├── include_landing_page    bool      — whether to also generate a landing page
 ├── scenario                str|None  — generated by stage 1
 ├── org_data                OrgData   — populated by stage 2
 │   ├── company_name
@@ -201,8 +236,11 @@ PhishingState
 │   │       └── usable      ← added by stage 4
 │   ├── colors[]
 │   └── fonts[]
-├── html_email              str|None  — generated by stage 5
-├── output_path             str|None  — set by stage 6
+├── landing_page_html       str|None  — generated by stage 5 (None if skipped)
+├── landing_page_filename   str|None  — relative filename the email CTA links to
+├── html_email              str|None  — generated by stage 6
+├── output_path             str|None  — email path, set by stage 7
+├── landing_page_path       str|None  — landing page path, set by stage 7 (if generated)
 └── errors                  list[str] — accumulated across all stages (non-fatal warnings)
 ```
 
@@ -219,6 +257,7 @@ Errors are non-fatal by design. Each node appends to the `errors` list rather th
 | BrandFetch parse failure | Log warning; use partial data if available |
 | Logo analysis failure (per logo) | Mark as `usable: false`; fall back to next best logo |
 | Sparse brand data (<3 colors, 0 logos) | Treat as no data; use Claude knowledge |
+| Landing page generation failure | Log warning; continue — email uses a fake spoof URL |
 
 ---
 
@@ -229,11 +268,33 @@ phishing/
 ├── main.py              — CLI entry point, wizard, progress display
 ├── graph.py             — LangGraph graph definition and node wiring
 ├── state.py             — Shared state schema (PhishingState, OrgData, BrandData)
+├── llm.py               — ChatAnthropic factory (model-aware temperature handling)
+├── naming.py            — Shared output-filename helpers
 └── nodes/
     ├── scenario.py      — Stage 1: scenario generation
     ├── org_data.py      — Stage 2: structured company data extraction
     ├── brand_fetch.py   — Stage 3: BrandFetch API integration
     ├── logo_analysis.py — Stage 4: Claude Vision logo evaluation
-    ├── email_builder.py — Stage 5: HTML email generation
-    └── output.py        — Stage 6: file save and browser open
+    ├── landing_page.py  — Stage 5: standalone landing page (optional)
+    ├── email_builder.py — Stage 6: HTML email generation
+    └── output.py        — Stage 7: file save and browser open
 ```
+
+---
+
+## Model Compatibility
+
+All nodes build their Claude client through `phishing/llm.py` → `make_chat()` rather than
+constructing `ChatAnthropic` directly. This centralizes two cross-model concerns:
+
+- **Sampling parameters** — `temperature` was removed on newer Claude models (the entire
+  5-family, plus Opus 4.7/4.8). `make_chat()` passes `temperature` only to models that still
+  accept it (4.6 and older); for newer models it is silently omitted, so the same code runs
+  on any configured model without a 400 error.
+- **Response text** — models with thinking enabled (the 5-family, on by default) return
+  content as a list of blocks rather than a plain string. Nodes read model text via
+  `str(response.text)`, which concatenates the text blocks and works whether thinking is on
+  or off.
+
+This is why `PHISHING_EMAIL_MODEL` / `PHISHING_LANDING_MODEL` can be set to any current
+Claude model id without code changes.

@@ -1,8 +1,8 @@
 import asyncio
-from langchain_anthropic import ChatAnthropic
+from phishing.llm import make_chat
 from phishing.state import PhishingState, BrandData, Logo, LogoFormat
 
-_llm = ChatAnthropic(model="claude-sonnet-4-6", max_tokens=200)
+_llm = make_chat(model="claude-sonnet-4-6", max_tokens=200)
 _SEM = asyncio.Semaphore(5)
 
 _VISION_RASTER = {"png", "jpg", "jpeg", "webp"}
@@ -28,7 +28,7 @@ async def _analyze_single(fmt: LogoFormat) -> LogoFormat:
                     ],
                 },
             ])
-            text = response.content
+            text = str(response.text)
             usable = "USABLE: YES" in text.upper()
             analysis = text.split("USABLE:")[0].strip()
         except Exception as e:

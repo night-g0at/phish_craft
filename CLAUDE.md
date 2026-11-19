@@ -4,34 +4,58 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is an **n8n workflow project** for generating phishing email templates for cybersecurity awareness training. The entire project is a single n8n workflow definition: `Phishing_Email.json`.
+**PhishCraft** is a Python CLI tool that generates realistic phishing email templates — and optionally matching landing pages — for **authorized** cybersecurity awareness training. It is built on **LangGraph** (pipeline orchestration) and **Claude** via `langchain-anthropic`.
 
-## Workflow Architecture
+> For authorized security-awareness training only. Generated landing pages are deliberately inert — their forms capture nothing, make no network requests, and store nothing.
 
-The workflow is a multi-stage LLM pipeline triggered via n8n's chat interface:
+## Architecture
 
-1. **Scenario Generation** — User input describing a target persona is processed by GPT-4O (`4o Scenario Builder`) to generate a phishing scenario.
-2. **Brand Data Gathering** — `GatherOrgData` LLM chain extracts the target company's URL/description; `Get Brand Info` fetches brand assets (logos, colors, fonts) from the BrandFetch API (`https://api.brandfetch.io/v2/brands/{domain}`).
-3. **Logo Analysis** — A LangChain agent (`AI Agent`) invokes an external `ImageAnalysis` sub-workflow tool to evaluate brand logo effectiveness.
-4. **Email Generation** — `PhishBuilder` chain (powered by o3-mini) generates a realistic HTML phishing email using the gathered brand data.
-5. **Output** — A `Code` node base64-encodes the HTML; an HTML preview node renders it; `Read/Write Files from Disk1` saves the result as an `.html` file.
+The tool is a LangGraph pipeline (`phishing/graph.py`) of sequential nodes, each reading and updating a shared `PhishingState` (`phishing/state.py`). An interactive wizard (`phishing/main.py`) collects inputs, then the graph runs:
 
-## Required Credentials
+1. **Generate Scenario** (`nodes/scenario.py`) — expands wizard input into a phishing scenario.
+2. **Extract Org Data** (`nodes/org_data.py`) — structured extraction of company name/domain/description (Pydantic `OrgData`).
+3. **Fetch Brand Data** (`nodes/brand_fetch.py`) — pulls logos/colors/fonts from the BrandFetch API (`https://api.brandfetch.io/v2/brands/{domain}`); optional.
+4. **Analyze Logos** (`nodes/logo_analysis.py`) — Claude Vision rates each logo's email suitability.
+5. **Build Landing Page** (`nodes/landing_page.py`) — *optional*; generates a brand-matched, inert standalone landing page. Runs before the email so the email CTA can link to it.
+6. **Build Email** (`nodes/email_builder.py`) — generates the HTML phishing email.
+7. **Save Output** (`nodes/output.py`) — writes the email (and landing page, if any) to `Path.cwd()` and opens them in the browser.
 
-To run this workflow in n8n, configure these credentials:
-- **OpenAI API key** — used by multiple nodes (gpt-4o, gpt-4o-mini, o3-mini)
-- **BrandFetch API key** — used by the `Get Brand Info` HTTP node
+See `ARCHITECTURE.md` for the full stage-by-stage breakdown and the state schema.
 
-## Managing the Workflow
+## Key Conventions
 
-This project has no build/test/lint tooling. All changes are made directly to `Phishing_Email.json` or via the n8n web UI:
+- **Build LLM clients through `phishing/llm.py` → `make_chat()`, never `ChatAnthropic(...)` directly.** It handles two cross-model concerns centrally:
+  - `temperature` is passed only to models that still accept it (Claude 4.6 and older); it is omitted for the 5-family and Opus 4.7/4.8, which removed sampling params (passing it 400s).
+  - Callers express intent with `temperature=`; the factory decides whether to forward it.
+- **Read model text with `str(response.text)`, not `response.content`.** Models with thinking enabled (the 5-family, on by default) return content as a list of blocks; `.text` concatenates the text blocks and also works for plain-string responses.
+- **Filenames come from `phishing/naming.py`** (`safe_filename`, `landing_page_filename`) so the email's CTA target and the file written to disk always match.
+- **Errors are non-fatal.** Nodes append to `state["errors"]` (an `operator.add`-reduced list) instead of raising, so the pipeline always completes; warnings are shown in the final summary.
+- **Landing page safety is enforced in the prompt** (`nodes/landing_page.py`): no form submission, no `fetch`/`XMLHttpRequest`/`sendBeacon`, no storage; submit triggers a "Security Awareness Training" reveal. Preserve these guarantees when editing that node.
 
-- **Import**: In n8n, go to Workflows → Import → select `Phishing_Email.json`
-- **Export**: After editing in the UI, export and overwrite `Phishing_Email.json`
-- **Run**: Activate the workflow and send a chat message via the n8n chat trigger
+## Environment / Credentials
 
-## JSON Structure Notes
+Configured via `.env` (loaded with `python-dotenv` in `main.py`):
 
-The workflow JSON uses n8n's standard schema: top-level `nodes` array and `connections` object. Each node has a `type` (e.g., `@n8n/n8n-nodes-langchain.lmChatOpenAi`), `parameters`, and a unique `id`. The `connections` object maps node output ports to downstream node inputs by name.
+- `ANTHROPIC_API_KEY` — **required**.
+- `BRANDFETCH_API_KEY` — optional; without it, Claude uses built-in brand knowledge.
+- `PHISHING_EMAIL_MODEL` — optional; overrides the email model (code default `claude-sonnet-4-6`; the shipped `.env` sets `claude-opus-4-6`).
+- `PHISHING_LANDING_MODEL` — optional; overrides the landing-page model (defaults to `PHISHING_EMAIL_MODEL`).
 
-When editing the JSON directly, preserve node `id` values — they are referenced in `connections`.
+Any valid Claude model id works in the overrides thanks to the `make_chat()` / `.text` handling above.
+
+## Development
+
+This project has no build/test/lint tooling. It is a standard editable Python package.
+
+- **Install:** `python -m venv .venv && source .venv/bin/activate && pip install -e .`
+- **Run:** `phishcraft` (entry point `phishing.main:app`, a Typer CLI). The tool writes output files to the directory it is run from.
+- **Dependencies:** `langgraph`, `langchain-anthropic`, `httpx`, `pydantic`, `python-dotenv`, `rich`, `typer` (see `pyproject.toml`).
+- Because it's an editable install, source edits take effect without reinstalling. Reinstall only when dependencies or entry points in `pyproject.toml` change.
+
+## Adding a Pipeline Stage
+
+1. Add a node function `async def my_node(state: PhishingState) -> dict` in `phishing/nodes/`.
+2. Add any new fields to `PhishingState` in `phishing/state.py`.
+3. Register the node and wire its edges in `phishing/graph.py`.
+4. If the stage is optional, gate it on a state flag and return `{}` early when disabled (see `build_landing_page`).
+5. Build any LLM client via `make_chat()` and read responses via `str(response.text)`.

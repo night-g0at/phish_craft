@@ -24,8 +24,8 @@ def _check_env():
         raise typer.Exit(1)
 
 
-def _run_wizard() -> tuple[str, str | None, bool]:
-    """Interactive wizard. Returns (enriched_prompt, override_domain, include_banner)."""
+def _run_wizard() -> tuple[str, str | None, bool, bool]:
+    """Interactive wizard. Returns (enriched_prompt, override_domain, include_banner, include_landing)."""
     console.print(Rule("[bold cyan]Phishing Email Generator[/bold cyan]"))
     console.print("[dim]Press Enter to accept defaults or skip optional fields.[/dim]\n")
 
@@ -74,6 +74,13 @@ def _run_wizard() -> tuple[str, str | None, bool]:
     # 8. Training banner
     include_banner = Confirm.ask("\n[bold]8. Include training banner?[/bold]", default=True)
 
+    # 9. Landing page
+    include_landing = Confirm.ask(
+        "\n[bold]9. Also generate a matching landing page?[/bold] "
+        "[dim](standalone HTML; form is inert — no data captured)[/dim]",
+        default=False,
+    )
+
     # Build enriched prompt
     parts = [f"Target company: {company}"]
     if persona:
@@ -86,7 +93,7 @@ def _run_wizard() -> tuple[str, str | None, bool]:
         parts.append(f"Internal systems to mention: {systems}")
 
     enriched_prompt = "\n".join(parts)
-    return enriched_prompt, override_domain, include_banner
+    return enriched_prompt, override_domain, include_banner, include_landing
 
 
 @app.command()
@@ -94,14 +101,19 @@ def run():
     """Generate a phishing awareness training email."""
     _check_env()
 
-    enriched_prompt, override_domain, include_banner = _run_wizard()
+    enriched_prompt, override_domain, include_banner, include_landing = _run_wizard()
 
     console.print()
     console.print(Panel(enriched_prompt, title="[cyan]Simulation Brief[/cyan]", border_style="cyan"))
-    asyncio.run(_run_graph(enriched_prompt, override_domain, include_banner))
+    asyncio.run(_run_graph(enriched_prompt, override_domain, include_banner, include_landing))
 
 
-async def _run_graph(user_input: str, override_domain: str | None, include_banner: bool):
+async def _run_graph(
+    user_input: str,
+    override_domain: str | None,
+    include_banner: bool,
+    include_landing: bool,
+):
     # Import here so load_dotenv() runs before LangChain imports (which read env at import time)
     from phishing.graph import build_graph
 
@@ -111,9 +123,10 @@ async def _run_graph(user_input: str, override_domain: str | None, include_banne
         "generate_scenario": "Generating scenario",
         "extract_org_data":  "Extracting org data",
         "fetch_brand_data":  "Fetching brand assets",
-        "analyze_logos":     "Analyzing logos",
-        "build_email":       "Building email",
-        "save_output":       "Saving output",
+        "analyze_logos":      "Analyzing logos",
+        "build_landing_page": "Building landing page",
+        "build_email":        "Building email",
+        "save_output":        "Saving output",
     }
 
     merged_state: dict = {"errors": []}
@@ -131,6 +144,7 @@ async def _run_graph(user_input: str, override_domain: str | None, include_banne
                 "user_input": user_input,
                 "override_domain": override_domain,
                 "include_training_banner": include_banner,
+                "include_landing_page": include_landing,
                 "errors": [],
             },
             stream_mode="updates",
@@ -164,6 +178,9 @@ def _print_summary(state: dict):
     else:
         lines.append("[yellow]Brand:[/yellow]    no data (using Claude knowledge)")
     lines.append(f"[green]Saved:[/green]    {output_path}")
+    landing_path = state.get("landing_page_path")
+    if landing_path:
+        lines.append(f"[green]Landing:[/green]  {landing_path}")
     lines.append(f"[yellow]Warnings:[/yellow] {len(errors)}")
 
     console.print(Panel("\n".join(lines), title="[green]Done[/green]", border_style="green"))

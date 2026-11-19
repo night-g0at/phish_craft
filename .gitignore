@@ -6,9 +6,7 @@
 .env
 *.key
 *.pem
-
-# n8n local data
-.n8n/
+key.txt
 
 # Python
 __pycache__/

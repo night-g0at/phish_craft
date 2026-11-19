@@ -1,7 +1,7 @@
 import os
 import json
 from datetime import date
-from langchain_anthropic import ChatAnthropic
+from phishing.llm import make_chat
 from phishing.state import PhishingState, LogoFormat
 
 _SYSTEM = """You are assisting a cybersecurity team building phishing awareness training materials.
@@ -14,7 +14,7 @@ Requirements:
 - Include a logo (use a provided URL, or render a text-based logo block in the company's brand colors if no URL is available)
 - Use today's date for realism
 - The phishing pretext must closely follow the user_input and scenario — preserve the specific angle, urgency, and framing described
-- Always include a prominent, clearly styled CTA button (e.g. "Verify Now", "Re-enroll Now", "Complete Review") — it must be a full-width or centred button block in the company's primary brand color, with a believable but obviously fake href URL that matches the scenario (e.g. a spoofed internal portal domain). Also include a plain-text fallback URL below the button
+- Always include a prominent, clearly styled CTA button (e.g. "Verify Now", "Re-enroll Now", "Complete Review") — it must be a full-width or centred button block in the company's primary brand color. If landing_page_url is provided in the data, use that value EXACTLY as the button's href and as the plain-text fallback URL (it is the matching training landing page). Otherwise use a believable but obviously fake href URL that matches the scenario (e.g. a spoofed internal portal domain). Also include a plain-text fallback URL below the button
 - Match the layout, tone, and UX patterns a real attacker would use for this scenario
 - If include_training_banner is true, append a clearly styled training watermark section at the bottom of the email explaining it is a simulation and listing the social engineering tactics used. If false, omit it entirely.
 - Output ONLY the raw HTML document, starting with <!DOCTYPE html>
@@ -39,7 +39,9 @@ def _pick_best_logos(brand_data) -> list[str]:
 
 async def build_email(state: PhishingState) -> dict:
     model_name = os.environ.get("PHISHING_EMAIL_MODEL", "claude-sonnet-4-6")
-    llm = ChatAnthropic(model=model_name, temperature=0.4, max_tokens=4096)
+    # A full branded HTML email can exceed 4096 tokens; give it headroom so the
+    # output is never truncated (and isn't starved by thinking on 5-family models).
+    llm = make_chat(model=model_name, temperature=0.4, max_tokens=8192)
 
     org = state["org_data"]
     brand = state["brand_data"]
@@ -63,6 +65,8 @@ async def build_email(state: PhishingState) -> dict:
             "use_built_in_knowledge": brand is None,
         },
         "include_training_banner": state.get("include_training_banner", True),
+        # When a landing page was generated, point the CTA at its local file.
+        "landing_page_url": state.get("landing_page_filename"),
     }
 
     prompt = f"Build the phishing training email using this data:\n\n{json.dumps(context, indent=2)}"
@@ -72,7 +76,9 @@ async def build_email(state: PhishingState) -> dict:
         {"role": "user", "content": prompt},
     ])
 
-    html = response.content.strip()
+    # On models with thinking enabled (e.g. the Claude 5 family), response
+    # content is a list of blocks; `.text` concatenates just the text blocks.
+    html = str(response.text).strip()
     # Strip accidental markdown fences if the model disobeys
     if html.startswith("```"):
         html = html.split("```", 2)[-1] if html.count("```") >= 2 else html.lstrip("`\n")

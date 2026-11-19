@@ -1,7 +1,7 @@
-from langchain_anthropic import ChatAnthropic
+from phishing.llm import make_chat
 from phishing.state import PhishingState
 
-_llm = ChatAnthropic(model="claude-sonnet-4-6", temperature=0.7)
+_llm = make_chat(model="claude-sonnet-4-6", temperature=0.7)
 
 _SYSTEM = (
     "You are assisting a cybersecurity team building phishing awareness training materials. "
@@ -17,4 +17,4 @@ async def generate_scenario(state: PhishingState) -> dict:
         {"role": "system", "content": _SYSTEM},
         {"role": "user", "content": state["user_input"]},
     ])
-    return {"scenario": response.content}
+    return {"scenario": str(response.text)}

@@ -9,16 +9,22 @@ Generates realistic phishing email templates for authorized cybersecurity awaren
 ## How It Works
 
 ```
-Wizard → Scenario → Org Data → Brand Assets → Logo Analysis → HTML Email → Browser Preview
+Wizard → Scenario → Org Data → Brand Assets → Logo Analysis → Landing Page* → HTML Email → Browser Preview
 ```
+<sub>*Landing page stage runs only if you opt in (wizard step 9).</sub>
 
 1. You fill in a short wizard describing the target and scenario
 2. Claude generates a plausible phishing scenario from your inputs
 3. Company data is extracted (name, domain, description)
 4. Brand assets are fetched via BrandFetch API *(optional)*
 5. Logos are analyzed for email suitability via Claude Vision *(if brand data available)*
-6. Claude generates a polished HTML phishing email
-7. The result opens in your browser and is saved to your current directory
+6. *(Optional)* Claude generates a matching standalone **landing page** — the page the email's CTA links to
+7. Claude generates a polished HTML phishing email (its CTA links to the landing page, if one was generated)
+8. The result(s) open in your browser and are saved to your current directory
+
+### The landing page
+
+When enabled, the tool also produces a brand-matched landing page (e.g. a spoofed sign-in portal) that the email's call-to-action links to, saved as a second file. The page is **deliberately inert and safe for training**: the form submits nowhere, makes no network requests, and stores nothing — on submit it reveals a "Security Awareness Training" message explaining that a real attacker would now have the victim's credentials. Entered values are never captured, echoed, or logged.
 
 ---
 
@@ -62,9 +68,18 @@ ANTHROPIC_API_KEY=sk-ant-...
 # Optional — omit to let Claude use built-in brand knowledge
 BRANDFETCH_API_KEY=...
 
-# Optional — override the email generation model (default: claude-sonnet-4-6)
-# PHISHING_EMAIL_MODEL=claude-opus-4-6
+# Optional — override the email generation model (code default: claude-sonnet-4-6)
+PHISHING_EMAIL_MODEL=claude-opus-4-6
+
+# Optional — override the landing-page model (defaults to PHISHING_EMAIL_MODEL)
+# PHISHING_LANDING_MODEL=claude-opus-4-6
 ```
+
+> **Model note:** Newer Claude models (the 5-family, and Opus 4.7/4.8) removed the
+> `temperature` sampling parameter and run with thinking on by default. The tool
+> handles this automatically — `temperature` is passed only to models that still
+> accept it (4.6 and older), and response text is read in a way that works whether
+> thinking is on or off. Any valid Claude model id works in the overrides above.
 
 ---
 
@@ -76,7 +91,7 @@ Run the tool from any directory:
 phishcraft
 ```
 
-The wizard will walk you through 8 steps:
+The wizard will walk you through 9 steps:
 
 ```
 ─────────────── Phishing Email Generator ───────────────
@@ -90,9 +105,10 @@ Press Enter to accept defaults or skip optional fields.
 6. Internal systems:        Optional — systems to name-drop for realism (e.g. Workday, ServiceNow)
 7. Urgency level:           1 = Low / 2 = Medium / 3 = High
 8. Include training banner: Appends a watermark explaining this is a simulation
+9. Landing page:            Optional — also generate a matching standalone landing page (default: No)
 ```
 
-The generated HTML file is saved to the directory where you ran `phishcraft` and opens automatically in your browser.
+The generated HTML file(s) are saved to the directory where you ran `phishcraft` and open automatically in your browser. If you enable the landing page (step 9), a second `CompanyName_landing.html` file is created alongside the email.
 
 ---
 
@@ -164,7 +180,10 @@ The generated HTML file is saved to the directory where you ran `phishcraft` and
 | Scenario generation | `claude-sonnet-4-6` | Creative, contextual |
 | Org data extraction | `claude-haiku-4-5-20251001` | Fast structured output |
 | Logo analysis | `claude-sonnet-4-6` | Vision — skipped if no brand data |
+| Landing page | `PHISHING_EMAIL_MODEL` | Only if opted in; override via `PHISHING_LANDING_MODEL` |
 | Email generation | `claude-sonnet-4-6` | Override via `PHISHING_EMAIL_MODEL` |
+
+The shipped `.env` sets `PHISHING_EMAIL_MODEL=claude-opus-4-6`, so by default the email and landing page are generated with Opus 4.6.
 
 ---
 
@@ -184,4 +203,5 @@ If BrandFetch returns sparse data for a domain (no logos, fewer than 3 colors), 
 ## Output
 
 - **Browser**: Opens automatically from your current directory
-- **File**: Saved as `CompanyName.html` in the directory where `phishcraft` was run
+- **Email file**: Saved as `CompanyName.html` in the directory where `phishcraft` was run
+- **Landing page file** *(if enabled)*: Saved as `CompanyName_landing.html` in the same directory; the email's CTA links to it

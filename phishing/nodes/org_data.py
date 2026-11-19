@@ -1,8 +1,8 @@
 import re
-from langchain_anthropic import ChatAnthropic
+from phishing.llm import make_chat
 from phishing.state import PhishingState, OrgData
 
-_llm = ChatAnthropic(model="claude-haiku-4-5-20251001", temperature=0).with_structured_output(OrgData)
+_llm = make_chat(model="claude-haiku-4-5-20251001", temperature=0).with_structured_output(OrgData)
 
 _SYSTEM = (
     "You are extracting structured company data for a cybersecurity awareness training tool. "
